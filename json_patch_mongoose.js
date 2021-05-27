@@ -360,7 +360,7 @@ class JSONPatchMongoose {
                 }
 
                 //if it's an array of linked refs
-                if(array_schema.options.type[0].ref) {
+                if(array_schema && array_schema.options.type[0].ref) {
                     this.path_info[absolute_path] = {
                         absolute_path: absolute_path,
                         relative_path: relative_path,
