@@ -97,8 +97,15 @@ class JSONPatchMongoose {
         path = this.jsonPointerToMongoosePath(path);
         let current_value = this.document.get(path);
         let parent = this.walkPath(path, -1);
-        if(Array.isArray(parent))
+        if(Array.isArray(parent)) {
+            if (!parent.pull) {
+                const i = parent.indexOf(current_value);
+                if (i !== -1)
+                    return parent.splice(parent.indexOf(current_value), 1);
+            }
             return parent.pull(current_value);
+        }
+
         this.setPath(path, undefined);
     }
 
