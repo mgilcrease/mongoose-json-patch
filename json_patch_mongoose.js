@@ -1,3 +1,8 @@
+/*
+ *   Copyright (c) 2020 Ratio Software, LLC 
+ *   All rights reserved.
+ *   @author Clayton Gulick <clay@ratiosoftware.com>
+ */
 const mongoose = require('mongoose');
 const assert = require('assert');
 const patch_schema = require('./schema.json');
@@ -56,14 +61,21 @@ class JSONPatchMongoose {
             let {op, path} = item;
 
             let middleware_handler;
+            let matches;
 
             //check to see if we have any middleware defined
             if(this.options.middleware)
                 for(let middleware of this.options.middleware) {
-                    if(middleware.op == op) {
+                    let op_matches;
+                    if(Array.isArray(middleware.op)) 
+                        op_matches = middleware.op.includes(op);
+                    else
+                        op_matches = (middleware.op == op)
+                    if(op_matches) {
                         if(!middleware.regex)
                             middleware.regex = new RegExp(middleware.path);
-                        if(middleware.regex.test(path)) {
+                        matches = middleware.regex.exec(path);
+                        if(matches) {
                             middleware_handler = middleware.handler;
                             break;
                         }
@@ -71,13 +83,12 @@ class JSONPatchMongoose {
                 }
 
             let next = async () => {
-                if(this.options.autopopulate)
-                    await this.populatePath(path);
+                await this.populatePath(path);
                 await this[op](item);
             }
 
             if(middleware_handler)
-                await middleware_handler(document, item, next);
+                await middleware_handler(document, item, next, matches);
             else
                 await next();
         }
@@ -311,7 +322,9 @@ class JSONPatchMongoose {
             else if(current_object instanceof mongoose.Types.ObjectId) {
                 let schema_type = relative_root.schema.path(relative_path);
                 //if this has a ref in the schema, it needs to be populated
-                if( schema_type &&
+                if( 
+                    this.options.autopopulate && //if we're not populating, treat it as a leaf
+                    schema_type &&
                     schema_type.options.ref) {
                     this.path_info[absolute_path] = {
                         absolute_path: absolute_path,
@@ -320,7 +333,7 @@ class JSONPatchMongoose {
                         document: current_object,
                         type: 'root'
                     }
-                    await relative_root.populate(relative_path).execPopulate();
+                    await relative_root.populate(relative_path);
                     current_object = relative_root.get(relative_path);
                     relative_root = current_object;
                     relative_root_index = i-1;
@@ -376,7 +389,7 @@ class JSONPatchMongoose {
                         type: 'ref_array'
                     }
                     if(!relative_root.populated(relative_path))
-                        await relative_root.populate(relative_path).execPopulate();
+                        await relative_root.populate(relative_path);
                 }
                 //if it's just an array of subdocs, no linked refs
                 else {
